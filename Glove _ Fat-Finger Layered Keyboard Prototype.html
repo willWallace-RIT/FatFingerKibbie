@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glove / Fat-Finger Layered Keyboard — Gboard-Inspired Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: #eef2f6;
+      color: #111827;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Gboard-inspired elevated keycap styling */
+    .gboard-key {
+      position: relative;
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14), 0 1px 0 rgba(15, 23, 42, 0.08);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      transition: transform 80ms cubic-bezier(0.2, 0, 0, 1), background-color 110ms ease, box-shadow 110ms ease;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .gboard-key:hover {
+      background: #f8fafc;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, 0.14), 0 1px 0 rgba(15, 23, 42, 0.08);
+    }
+
+    .gboard-key:active,
+    .gboard-key.is-pressed {
+      transform: scale(0.96);
+      background: #dbeafe;
+      border-color: #93c5fd;
+    }
+
+    /* Utility/Control keys (First Page, Next Page, Sym, Space, Backspace) */
+    .gboard-fn-key {
+      position: relative;
+      background: #dce3ec;
+      color: #1e293b;
+      border-radius: 14px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      transition: transform 80ms cubic-bezier(0.2, 0, 0, 1), background-color 110ms ease;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .gboard-fn-key:hover {
+      background: #cbd5e1;
+    }
+
+    .gboard-fn-key:active,
+    .gboard-fn-key.is-pressed {
+      transform: scale(0.96);
+      background: #bfdbfe;
+    }
+
+    .gboard-primary-key {
+      background: #1a73e8;
+      color: #ffffff;
+      border: 1px solid #1557b0;
+      box-shadow: 0 2px 5px rgba(26, 115, 232, 0.28);
+    }
+
+    .gboard-primary-key:hover {
+      background: #1765cc;
+    }
+
+    .gboard-primary-key:active,
+    .gboard-primary-key.is-pressed {
+      background: #1253a8;
+      transform: scale(0.96);
+    }
+
+    /* Simulated Glove Contact Patch visual indicator */
+    #glove-contact-patch {
+      position: fixed;
+      pointer-events: none;
+      width: 68px;
+      height: 68px;
+      margin-left: -34px;
+      margin-top: -34px;
+      border-radius: 9999px;
+      background: radial-gradient(circle, rgba(26, 115, 232, 0.24) 0%, rgba(26, 115, 232, 0.11) 62%, rgba(26, 115, 232, 0.02) 100%);
+      border: 2px dashed rgba(26, 115, 232, 0.65);
+      z-index: 9999;
+      opacity: 0;
+      transform: scale(0.82);
+      transition: opacity 110ms ease, transform 110ms ease, width 150ms ease, height 150ms ease, margin 150ms ease;
+    }
+
+    #glove-contact-patch.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    #glove-contact-patch.heavy-glove {
+      width: 88px;
+      height: 88px;
+      margin-left: -44px;
+      margin-top: -44px;
+      background: radial-gradient(circle, rgba(217, 119, 6, 0.26) 0%, rgba(217, 119, 6, 0.12) 65%, rgba(217, 119, 6, 0.02) 100%);
+      border-color: rgba(217, 119, 6, 0.75);
+    }
+
+    /* Custom subtle scrollbars for telemetry */
+    .thin-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .thin-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .thin-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-4 px-3 sm:px-6">
+  <!-- Simulated Glove Contact Patch overlay -->
+  <div id="glove-contact-patch" aria-hidden="true"></div>
+
+  <div class="w-full max-w-4xl flex flex-col gap-4">
+    <!-- Top Header & Configuration Bar -->
+    <header class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-5 flex flex-col gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold mb-1.5">
+            <span>Glove / Fat-Finger Mode</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+            <span>Forward-Paged Layers</span>
+          </div>
+          <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            Layered Glove Keyboard Prototype
+          </h1>
+          <p class="text-xs sm:text-sm text-slate-600 mt-0.5">
+            High-frequency keys first across 5–9 pages with large targets, one-tap <span class="font-medium text-slate-800">First Page</span> &amp; <span class="font-medium text-slate-800">Next Page</span> navigation, and a dedicated <span class="font-medium text-slate-800">Sym</span> bank.
+          </p>
+        </div>
+
+        <!-- Glove Patch Size Selector -->
+        <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl self-start sm:self-center">
+          <button
+            id="patch-standard-btn"
+            type="button"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-xs transition"
+          >
+            Light Glove (68px)
+          </button>
+          <button
+            id="patch-heavy-btn"
+            type="button"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
+          >
+            Thick Winter Glove (88px)
+          </button>
+        </div>
+      </div>
+
+      <!-- Controls Row: Page Count (5-9) & Post-Key-Press Behavior -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+        <!-- Page Count Selector (5 to 9, default 6) -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+          <div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Letter Page Count</span>
+            <span class="text-xs text-slate-600">Partition 26 frequency-ranked letters</span>
+          </div>
+          <div class="flex items-center gap-1.5" role="group" aria-label="Letter pages count">
+            <button type="button" data-page-count="5" class="page-count-btn w-9 h-9 rounded-xl text-sm font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition">5</button>
+            <button type="button" data-page-count="6" class="page-count-btn w-9 h-9 rounded-xl text-sm font-bold border border-blue-600 bg-blue-600 text-white shadow-xs transition">6</button>
+            <button type="button" data-page-count="7" class="page-count-btn w-9 h-9 rounded-xl text-sm font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition">7</button>
+            <button type="button" data-page-count="8" class="page-count-btn w-9 h-9 rounded-xl text-sm font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition">8</button>
+            <button type="button" data-page-count="9" class="page-count-btn w-9 h-9 rounded-xl text-sm font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition">9</button>
+          </div>
+        </div>
+
+        <!-- Post-Key-Press Return Behavior -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+          <div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 block">After Typing a Key</span>
+            <span id="post-key-desc" class="text-xs text-slate-600">Auto-return to Page 1 for rapid common keys</span>
+          </div>
+          <button
+            id="auto-return-toggle"
+            type="button"
+            aria-pressed="true"
+            class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center justify-center gap-2 shrink-0"
+          >
+            <span id="auto-return-indicator" class="w-2 h-2 rounded-full bg-emerald-300"></span>
+            <span id="auto-return-label">Auto-First: ON</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Live Output Buffer & Quick Actions -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Composed Text Output</span>
+          <span id="char-count-badge" class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">0 chars</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="copy-output-btn"
+            type="button"
+            class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 transition flex items-center gap-1.5"
+          >
+            <span>Copy</span>
+          </button>
+          <button
+            id="clear-output-btn"
+            type="button"
+            class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 transition"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="output-buffer"
+        class="min-h-[76px] max-h-40 overflow-y-auto thin-scroll w-full rounded-xl bg-slate-50 border border-slate-200/90 p-3.5 text-lg sm:text-xl leading-relaxed text-slate-900 font-medium break-words"
+        aria-live="polite"
+      >
+        <span id="output-placeholder" class="text-slate-400 font-normal text-base">Tap large keys below to compose text with gloved fingers...</span>
+        <span id="output-text"></span>
+        <span class="inline-block w-0.5 h-5 bg-blue-600 align-middle ml-0.5 animate-pulse"></span>
+      </div>
+
+      <!-- Inline Status / Toast Message Area (no alert()) -->
+      <div id="status-banner" class="hidden text-xs font-medium px-3 py-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200"></div>
+    </section>
+
+    <!-- Gboard-Inspired Layered Keyboard Surface -->
+    <section
+      id="keyboard-container"
+      class="bg-[#e8edf3] rounded-3xl shadow-md border border-slate-300/80 p-3 sm:p-4 flex flex-col gap-3 select-none"
+      aria-label="Glove Layered Keyboard"
+    >
+      <!-- Top Layer Strip: Bank Switcher, Page Indicator & Quick First Page -->
+      <div class="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div class="flex items-center gap-2">
+          <span
+            id="active-bank-pill"
+            class="px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-blue-600 text-white shadow-2xs"
+          >
+            Letters Bank
+          </span>
+          <span id="page-indicator" class="text-sm font-bold text-slate-800">
+            Page 1 of 6
+          </span>
+          <span id="page-frequency-hint" class="hidden sm:inline text-xs text-slate-600">
+            • Highest-frequency keys
+          </span>
+        </div>
+
+        <!-- Page Dots Indicator -->
+        <div id="page-dots" class="flex items-center gap-1.5" aria-label="Current layer progress"></div>
+      </div>
+
+      <!-- Primary Navigation Row: Explicit FIRST PAGE & NEXT PAGE -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        <button
+          id="first-page-btn"
+          type="button"
+          class="gboard-fn-key h-14 sm:h-16 px-4 flex items-center justify-center gap-2 font-bold text-sm sm:text-base"
+        >
+          <span aria-hidden="true">⏮</span>
+          <span>First Page</span>
+        </button>
+
+        <button
+          id="next-page-btn"
+          type="button"
+          class="gboard-fn-key gboard-primary-key h-14 sm:h-16 px-4 flex items-center justify-center gap-2 font-bold text-sm sm:text-base"
+        >
+          <span>Next Page</span>
+          <span aria-hidden="true">⏭</span>
+        </button>
+
+        <button
+          id="sym-toggle-btn"
+          type="button"
+          class="gboard-fn-key col-span-2 sm:col-span-1 h-14 sm:h-16 px-4 flex items-center justify-center gap-2 font-bold text-sm sm:text-base"
+        >
+          <span id="sym-toggle-icon" aria-hidden="true">!?#</span>
+          <span id="sym-toggle-label">Sym Mode</span>
+        </button>
+      </div>
+
+      <!-- Active Page Key Grid (Large Fat-Finger Keycaps) -->
+      <div
+        id="active-keys-grid"
+        class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3"
+        role="group"
+        aria-label="Active layer keys"
+      >
+        <!-- Keys dynamically rendered by JavaScript -->
+      </div>
+
+      <!-- Bottom Utility Row: Quick First, Shift/Case (for letters), Space, Backspace -->
+      <div class="grid grid-cols-12 gap-2 pt-1">
+        <button
+          id="quick-first-btn"
+          type="button"
+          title="Jump immediately to Page 1"
+          class="gboard-fn-key col-span-3 sm:col-span-2 h-14 sm:h-16 font-bold text-xs sm:text-sm flex flex-col items-center justify-center leading-tight"
+        >
+          <span>P1</span>
+          <span class="text-[10px] font-semibold uppercase opacity-75">First</span>
+        </button>
+
+        <button
+          id="case-toggle-btn"
+          type="button"
+          title="Toggle Uppercase / Lowercase"
+          class="gboard-fn-key col-span-3 sm:col-span-2 h-14 sm:h-16 font-bold text-xs sm:text-sm flex flex-col items-center justify-center leading-tight"
+        >
+          <span id="case-indicator" class="text-base">aa</span>
+          <span class="text-[10px] font-semibold uppercase opacity-75">Case</span>
+        </button>
+
+        <button
+          id="space-key-btn"
+          type="button"
+          class="gboard-key col-span-3 sm:col-span-5 h-14 sm:h-16 font-semibold text-sm sm:text-base text-slate-700 flex items-center justify-center gap-2"
+        >
+          <span>Space</span>
+        </button>
+
+        <button
+          id="backspace-key-btn"
+          type="button"
+          aria-label="Backspace"
+          class="gboard-fn-key col-span-3 sm:col-span-3 h-14 sm:h-16 font-bold text-base sm:text-lg flex items-center justify-center gap-1.5"
+        >
+          <span aria-hidden="true">⌫</span>
+          <span class="hidden sm:inline text-xs uppercase tracking-wide">Del</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Frequency Partition & Telemetry Inspector -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Layer Map Overview -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-900">Active Bank Layer Partition</h2>
+          <span id="bank-summary-meta" class="text-xs text-slate-500"></span>
+        </div>
+        <p class="text-xs text-slate-600">
+          Letters are ordered by English frequency (<span class="font-mono text-slate-800">E T A O I N S H R D L C U M W F G Y P B V K J X Q Z</span>) so your most common taps live on Page 1. Tap any layer card to jump straight to it.
+        </p>
+        <div id="layer-partition-list" class="flex flex-col gap-2 max-h-64 overflow-y-auto thin-scroll pr-1"></div>
+      </div>
+
+      <!-- Telemetry Log -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-900">State &amp; Tap Telemetry</h2>
+          <button
+            id="clear-telemetry-btn"
+            type="button"
+            class="text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
+          >
+            Clear Log
+          </button>
+        </div>
+        <div
+          id="telemetry-log"
+          class="bg-slate-950 text-slate-200 rounded-xl p-3 font-mono text-xs h-64 overflow-y-auto thin-scroll flex flex-col gap-1.5"
+        >
+          <div class="text-slate-400">[INIT] Layered Glove Keyboard ready. Starting on LETTERS Page 1/6.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    /**
+     * Glove / Fat-Finger Layered Keyboard State Machine & Renderer
+     * -----------------------------------------------------------
+     * Implements:
+     * 1. Frequency-ordered English letter bank partitioned into 5-9 pages (default 6).
+     * 2. Dedicated multi-page Symbol bank with independent page index.
+     * 3. Forward-only "Next Page" ((page + 1) % totalPages) + explicit "First Page" (page = 0).
+     * 4. Configurable auto-return to Page 1 after key press vs staying on current page.
+     * 5. Simulated Glove Contact Patch visual indicator & state telemetry log.
+     */
+    (function () {
+      'use strict';
+
+      // Standard English letter frequency ranking (most common -> least common)
+      const FREQUENCY_LETTERS = [
+        'E', 'T', 'A', 'O', 'I', 'N',
+        'S', 'H', 'R', 'D', 'L', 'C',
+        'U', 'M', 'W', 'F', 'G', 'Y',
+        'P', 'B', 'V', 'K', 'J', 'X',
+        'Q', 'Z'
+      ];
+
+      // Curated symbol & punctuation set grouped into 3 clean glove-friendly pages
+      const SYMBOL_PAGES = [
+        ['.', ',', '?', '!', "'", '"'],
+        ['@', '#', '$', '%', '&', '/'],
+        ['-', '_', ':', ';', '(', ')', '+', '=']
+      ];
+
+      // Application state
+      const state = {
+        bank: 'letters',          // 'letters' | 'symbols'
+        letterPageCount: 6,       // Configurable 5..9 (default 6)
+        letterPageIndex: 0,       // 0-based active index for letters
+        symbolPageIndex: 0,       // 0-based active index for symbols
+        autoReturnToFirst: true,  // Return to Page 1 after typing a character
+        uppercase: false,         // Lowercase by default
+        outputText: '',           // Composed text buffer
+        heavyGlovePatch: false,   // Larger simulated glove touch patch
+        telemetry: []             // Recent state transitions and keystrokes
+      };
+
+      // DOM element references
+      const els = {
+        patch: document.getElementById('glove-contact-patch'),
+        patchStandardBtn: document.getElementById('patch-standard-btn'),
+        patchHeavyBtn: document.getElementById('patch-heavy-btn'),
+        pageCountBtns: Array.from(document.querySelectorAll('.page-count-btn')),
+        autoReturnToggle: document.getElementById('auto-return-toggle'),
+        autoReturnIndicator: document.getElementById('auto-return-indicator'),
+        autoReturnLabel: document.getElementById('auto-return-label'),
+        postKeyDesc: document.getElementById('post-key-desc'),
+        outputPlaceholder: document.getElementById('output-placeholder'),
+        outputText: document.getElementById('output-text'),
+        charCountBadge: document.getElementById('char-count-badge'),
+        copyOutputBtn: document.getElementById('copy-output-btn'),
+        clearOutputBtn: document.getElementById('clear-output-btn'),
+        statusBanner: document.getElementById('status-banner'),
+        activeBankPill: document.getElementById('active-bank-pill'),
+        pageIndicator: document.getElementById('page-indicator'),
+        pageFrequencyHint: document.getElementById('page-frequency-hint'),
+        pageDots: document.getElementById('page-dots'),
+        firstPageBtn: document.getElementById('first-page-btn'),
+        nextPageBtn: document.getElementById('next-page-btn'),
+        symToggleBtn: document.getElementById('sym-toggle-btn'),
+        symToggleIcon: document.getElementById('sym-toggle-icon'),
+        symToggleLabel: document.getElementById('sym-toggle-label'),
+        activeKeysGrid: document.getElementById('active-keys-grid'),
+        quickFirstBtn: document.getElementById('quick-first-btn'),
+        caseToggleBtn: document.getElementById('case-toggle-btn'),
+        caseIndicator: document.getElementById('case-indicator'),
+        spaceKeyBtn: document.getElementById('space-key-btn'),
+        backspaceKeyBtn: document.getElementById('backspace-key-btn'),
+        bankSummaryMeta: document.getElementById('bank-summary-meta'),
+        layerPartitionList: document.getElementById('layer-partition-list'),
+        telemetryLog: document.getElementById('telemetry-log'),
+        clearTelemetryBtn: document.getElementById('clear-telemetry-btn')
+      };
+
+      let statusTimeout = null;
+
+      /**
+       * Partitions an array into `numPages` balanced slices so earlier pages
+       * receive the highest-priority items and every page gets a limited, large set.
+       */
+      function partitionIntoPages(items, numPages) {
+        const safePages = Math.max(1, Math.min(numPages, items.length));
+        const baseSize = Math.floor(items.length / safePages);
+        const remainder = items.length % safePages;
+
+        const pages = [];
+        let cursor = 0;
+
+        for (let i = 0; i < safePages; i++) {
+          const size = baseSize + (i < remainder ? 1 : 0);
+          pages.push(items.slice(cursor, cursor + size));
+          cursor += size;
+        }
+        return pages;
+      }
+
+      function getLetterPages() {
+        return partitionIntoPages(FREQUENCY_LETTERS, state.letterPageCount);
+      }
+
+      function getActivePages() {
+        return state.bank === 'letters' ? getLetterPages() : SYMBOL_PAGES;
+      }
+
+      function getCurrentPageIndex() {
+        const pages = getActivePages();
+        const rawIndex = state.bank === 'letters' ? state.letterPageIndex : state.symbolPageIndex;
+        return Math.max(0, Math.min(rawIndex, pages.length - 1));
+      }
+
+      function setCurrentPageIndex(nextIndex) {
+        const pages = getActivePages();
+        const normalized = ((nextIndex % pages.length) + pages.length) % pages.length;
+        if (state.bank === 'letters') {
+          state.letterPageIndex = normalized;
+        } else {
+          state.symbolPageIndex = normalized;
+        }
+      }
+
+      function recordTelemetry(tag, detail) {
+        const now = new Date();
+        const timeStr = now.toTimeString().split(' ')[0];
+        state.telemetry.unshift({ time: timeStr, tag, detail });
+        if (state.telemetry.length > 60) {
+          state.telemetry.pop();
+        }
+        renderTelemetry();
+      }
+
+      function showStatusMessage(message, tone = 'success') {
+        if (!els.statusBanner) return;
+        clearTimeout(statusTimeout);
+        els.statusBanner.textContent = message;
+        els.statusBanner.className =
+          tone === 'warn'
+            ? 'text-xs font-medium px-3 py-2 rounded-xl bg-amber-50 text-amber-900 border border-amber-200'
+            : 'text-xs font-medium px-3 py-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200';
+        els.statusBanner.classList.remove('hidden');
+
+        statusTimeout = setTimeout(() => {
+          els.statusBanner.classList.add('hidden');
+        }, 2400);
+      }
+
+      /**
+       * Navigation Actions:
+       * - jumpToFirstPage(): immediately sets current bank page to index 0.
+       * - advanceToNextPage(): wraps forward using modulo (page + 1) % totalPages.
+       */
+      function jumpToFirstPage(source = 'First Page') {
+        const prevPage = getCurrentPageIndex() + 1;
+        setCurrentPageIndex(0);
+        recordTelemetry('FIRST_PAGE', `${state.bank.toUpperCase()} p${prevPage} -> p1 (via ${source})`);
+        render();
+      }
+
+      function advanceToNextPage(source = 'Next Page') {
+        const pages = getActivePages();
+        const prevPage = getCurrentPageIndex() + 1;
+        const nextIdx = (getCurrentPageIndex() + 1) % pages.length;
+        setCurrentPageIndex(nextIdx);
+        recordTelemetry('NEXT_PAGE', `${state.bank.toUpperCase()} p${prevPage} -> p${nextIdx + 1} (via ${source})`);
+        render();
+      }
+
+      function toggleSymbolBank() {
+        const prevBank = state.bank;
+        state.bank = state.bank === 'letters' ? 'symbols' : 'letters';
+        // Always start a newly entered bank on Page 1 for predictable gloved navigation
+        if (state.bank === 'symbols') {
+          state.symbolPageIndex = 0;
+        } else {
+          state.letterPageIndex = 0;
+        }
+        recordTelemetry('BANK_SWITCH', `${prevBank.toUpperCase()} -> ${state.bank.toUpperCase()} (Page 1)`);
+        render();
+      }
+
+      function appendCharacter(rawChar) {
+        const charToInsert =
+          state.bank === 'letters'
+            ? (state.uppercase ? rawChar.toUpperCase() : rawChar.toLowerCase())
+            : rawChar;
+
+        state.outputText += charToInsert;
+
+        // Reset case after typing an uppercase letter for natural typing flow
+        if (state.bank === 'letters' && state.uppercase) {
+          state.uppercase = false;
+        }
+
+        const currentPageNum = getCurrentPageIndex() + 1;
+        if (state.autoReturnToFirst && getCurrentPageIndex() !== 0) {
+          setCurrentPageIndex(0);
+          recordTelemetry('KEY+AUTO_P1', `Typed "${charToInsert}" on p${currentPageNum} -> returned to p1`);
+        } else {
+          recordTelemetry('KEY_PRESS', `Typed "${charToInsert}" on ${state.bank.toUpperCase()} p${currentPageNum}`);
+        }
+
+        render();
+      }
+
+      function handleSpace() {
+        state.outputText += ' ';
+        if (state.autoReturnToFirst && getCurrentPageIndex() !== 0) {
+          const prev = getCurrentPageIndex() + 1;
+          setCurrentPageIndex(0);
+          recordTelemetry('SPACE+AUTO_P1', `Inserted space on p${prev} -> returned to p1`);
+        } else {
+          recordTelemetry('SPACE', 'Inserted space');
+        }
+        render();
+      }
+
+      function handleBackspace() {
+        if (!state.outputText.length) {
+          recordTelemetry('BACKSPACE', 'Buffer already empty');
+          return;
+        }
+        const removed = state.outputText.slice(-1);
+        state.outputText = state.outputText.slice(0, -1);
+        recordTelemetry('BACKSPACE', `Removed "${removed === ' ' ? 'SPACE' : removed}"`);
+        render();
+      }
+
+      function setLetterPageCount(count) {
+        const parsed = Number(count);
+        if (parsed < 5 || parsed > 9) return;
+        state.letterPageCount = parsed;
+        state.letterPageIndex = 0;
+        recordTelemetry('PAGE_COUNT', `Letters partitioned into ${parsed} pages (reset to p1)`);
+        render();
+      }
+
+      function toggleAutoReturn() {
+        state.autoReturnToFirst = !state.autoReturnToFirst;
+        recordTelemetry(
+          'AUTO_RETURN',
+          state.autoReturnToFirst ? 'Enabled auto-return to Page 1 after key' : 'Disabled auto-return (stay on current page)'
+        );
+        render();
+      }
+
+      function toggleCase() {
+        state.uppercase = !state.uppercase;
+        recordTelemetry('CASE_TOGGLE', state.uppercase ? 'Uppercase mode ON' : 'Lowercase mode ON');
+        render();
+      }
+
+      function setGlovePatchSize(isHeavy) {
+        state.heavyGlovePatch = isHeavy;
+        els.patch.classList.toggle('heavy-glove', isHeavy);
+
+        if (isHeavy) {
+          els.patchHeavyBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-white shadow-xs transition';
+          els.patchStandardBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+        } else {
+          els.patchStandardBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-xs transition';
+          els.patchHeavyBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+        }
+
+        recordTelemetry('GLOVE_PATCH', isHeavy ? 'Thick winter glove patch (88px)' : 'Light glove patch (68px)');
+      }
+
+      // Render functions
+      function renderOutput() {
+        const hasText = state.outputText.length > 0;
+        els.outputPlaceholder.classList.toggle('hidden', hasText);
+        els.outputText.textContent = state.outputText;
+        const count = state.outputText.length;
+        els.charCountBadge.textContent = `${count} ${count === 1 ? 'char' : 'chars'}`;
+      }
+
+      function renderControls() {
+        // Page count buttons (5..9)
+        els.pageCountBtns.forEach((btn) => {
+          const val = Number(btn.dataset.pageCount);
+          const active = val === state.letterPageCount;
+          btn.className = active
+            ? 'page-count-btn w-9 h-9 rounded-xl text-sm font-bold border border-blue-600 bg-blue-600 text-white shadow-xs transition'
+            : 'page-count-btn w-9 h-9 rounded-xl text-sm font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition';
+        });
+
+        // Auto-return toggle state
+        els.autoReturnToggle.setAttribute('aria-pressed', String(state.autoReturnToFirst));
+        if (state.autoReturnToFirst) {
+          els.autoReturnToggle.className =
+            'px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center justify-center gap-2 shrink-0';
+          els.autoReturnIndicator.className = 'w-2 h-2 rounded-full bg-emerald-300';
+          els.autoReturnLabel.textContent = 'Auto-First: ON';
+          els.postKeyDesc.textContent = 'Auto-return to Page 1 after typing a key';
+        } else {
+          els.autoReturnToggle.className =
+            'px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200 text-slate-800 hover:bg-slate-300 transition flex items-center justify-center gap-2 shrink-0';
+          els.autoReturnIndicator.className = 'w-2 h-2 rounded-full bg-slate-500';
+          els.autoReturnLabel.textContent = 'Auto-First: OFF';
+          els.postKeyDesc.textContent = 'Stay on current page until First Page or Next Page is tapped';
+        }
+
+        // Case indicator
+        els.caseIndicator.textContent = state.uppercase ? 'AA' : 'aa';
+        els.caseToggleBtn.classList.toggle('bg-blue-100', state.uppercase);
+        els.caseToggleBtn.classList.toggle('border-blue-400', state.uppercase);
+      }
+
+      function renderKeyboard() {
+        const pages = getActivePages();
+        const pageIdx = getCurrentPageIndex();
+        const currentKeys = pages[pageIdx] || [];
+        const isLetters = state.bank === 'letters';
+
+        els.activeBankPill.textContent = isLetters ? 'Letters Bank' : 'Symbols Bank';
+        els.activeBankPill.className = isLetters
+          ? 'px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-blue-600 text-white shadow-2xs'
+          : 'px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-indigo-600 text-white shadow-2xs';
+
+        els.pageIndicator.textContent = `Page ${pageIdx + 1} of ${pages.length}`;
+
+        if (isLetters) {
+          if (pageIdx === 0) {
+            els.pageFrequencyHint.textContent = '• Highest-frequency English letters';
+          } else if (pageIdx === pages.length - 1) {
+            els.pageFrequencyHint.textContent = '• Rare / trailing letters';
+          } else {
+            els.pageFrequencyHint.textContent = '• Mid-frequency letters';
+          }
+        } else {
+          els.pageFrequencyHint.textContent = '• Punctuation & symbols';
+        }
+
+        // Page indicator dots
+        els.pageDots.innerHTML = '';
+        pages.forEach((_, idx) => {
+          const dot = document.createElement('button');
+          dot.type = 'button';
+          dot.title = `Jump to Page ${idx + 1}`;
+          dot.setAttribute('aria-label', `Jump to Page ${idx + 1}`);
+          dot.className =
+            idx === pageIdx
+              ? 'w-6 h-2.5 rounded-full bg-blue-600 transition-all'
+              : 'w-2.5 h-2.5 rounded-full bg-slate-300 hover:bg-slate-400 transition-all';
+          dot.addEventListener('click', () => {
+            if (state.bank === 'letters') {
+              state.letterPageIndex = idx;
+            } else {
+              state.symbolPageIndex = idx;
+            }
+            recordTelemetry('DIRECT_PAGE', `${state.bank.toUpperCase()} jumped to page ${idx + 1}`);
+            render();
+          });
+          els.pageDots.appendChild(dot);
+        });
+
+        // Sym / Letters mode button label
+        if (isLetters) {
+          els.symToggleIcon.textContent = '!?#';
+          els.symToggleLabel.textContent = 'Sym Mode';
+        } else {
+          els.symToggleIcon.textContent = 'ABC';
+          els.symToggleLabel.textContent = 'Letters';
+        }
+
+        // Adapt grid columns for large fat-finger keys
+        const colClass = currentKeys.length <= 4 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3';
+        els.activeKeysGrid.className = `grid ${colClass} gap-2.5 sm:gap-3`;
+
+        // Render active layer keys
+        els.activeKeysGrid.innerHTML = '';
+        currentKeys.forEach((rawKey, indexInPage) => {
+          const displayLabel = isLetters
+            ? (state.uppercase ? rawKey.toUpperCase() : rawKey.toLowerCase())
+            : rawKey;
+
+          const keyBtn = document.createElement('button');
+          keyBtn.type = 'button';
+          keyBtn.className =
+            'gboard-key min-h-[76px] sm:min-h-[88px] px-4 py-3 flex items-center justify-between text-left';
+          keyBtn.setAttribute('aria-label', `Type ${displayLabel}`);
+
+          const mainGlyph = document.createElement('span');
+          mainGlyph.className = 'text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight';
+          mainGlyph.textContent = displayLabel;
+
+          const rankBadge = document.createElement('span');
+          rankBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500';
+          if (isLetters) {
+            const globalFreqRank = FREQUENCY_LETTERS.indexOf(rawKey) + 1;
+            rankBadge.textContent = `#${globalFreqRank} freq`;
+          } else {
+            rankBadge.textContent = `S${pageIdx + 1}.${indexInPage + 1}`;
+          }
+
+          keyBtn.appendChild(mainGlyph);
+          keyBtn.appendChild(rankBadge);
+
+          keyBtn.addEventListener('click', () => {
+            appendCharacter(rawKey);
+          });
+
+          els.activeKeysGrid.appendChild(keyBtn);
+        });
+      }
+
+      function renderLayerPartitionList() {
+        const pages = getActivePages();
+        const activeIdx = getCurrentPageIndex();
+        const isLetters = state.bank === 'letters';
+
+        els.bankSummaryMeta.textContent = isLetters
+          ? `${FREQUENCY_LETTERS.length} letters • ${pages.length} pages`
+          : `${SYMBOL_PAGES.flat().length} symbols • ${pages.length} pages`;
+
+        els.layerPartitionList.innerHTML = '';
+        pages.forEach((group, idx) => {
+          const row = document.createElement('button');
+          row.type = 'button';
+          const isCurrent = idx === activeIdx;
+          row.className = isCurrent
+            ? 'w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-blue-50 border border-blue-300 text-left transition'
+            : 'w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/70 text-left transition';
+
+          const left = document.createElement('div');
+          left.className = 'flex items-center gap-2.5 min-w-0';
+
+          const pageTag = document.createElement('span');
+          pageTag.className = isCurrent
+            ? 'px-2 py-0.5 rounded-lg text-xs font-bold bg-blue-600 text-white shrink-0'
+            : 'px-2 py-0.5 rounded-lg text-xs font-bold bg-slate-200 text-slate-700 shrink-0';
+          pageTag.textContent = `P${idx + 1}`;
+
+          const keysPreview = document.createElement('span');
+          keysPreview.className = 'text-sm font-semibold text-slate-800 tracking-wider truncate';
+          keysPreview.textContent = group.join('  ');
+
+          left.appendChild(pageTag);
+          left.appendChild(keysPreview);
+
+          const rightBadge = document.createElement('span');
+          rightBadge.className = 'text-[11px] font-medium text-slate-500 shrink-0';
+          rightBadge.textContent = `${group.length} keys`;
+
+          row.appendChild(left);
+          row.appendChild(rightBadge);
+
+          row.addEventListener('click', () => {
+            if (state.bank === 'letters') {
+              state.letterPageIndex = idx;
+            } else {
+              state.symbolPageIndex = idx;
+            }
+            recordTelemetry('INSPECT_JUMP', `Selected ${state.bank.toUpperCase()} Page ${idx + 1}`);
+            render();
+          });
+
+          els.layerPartitionList.appendChild(row);
+        });
+      }
+
+      function renderTelemetry() {
+        if (!state.telemetry.length) {
+          els.telemetryLog.innerHTML = '<div class="text-slate-500">[LOG CLEARED] Waiting for input events...</div>';
+          return;
+        }
+
+        els.telemetryLog.innerHTML = state.telemetry
+          .map((item) => {
+            return `<div class="flex items-start gap-2 leading-snug">
+              <span class="text-slate-500 shrink-0">${escapeHtml(item.time)}</span>
+              <span class="text-sky-400 font-semibold shrink-0">[${escapeHtml(item.tag)}]</span>
+              <span class="text-slate-200 break-all">${escapeHtml(item.detail)}</span>
+            </div>`;
+          })
+          .join('');
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function render() {
+        renderOutput();
+        renderControls();
+        renderKeyboard();
+        renderLayerPartitionList();
+      }
+
+      // Simulated Glove Contact Patch pointer tracking
+      function updatePatchPosition(clientX, clientY) {
+        els.patch.style.left = `${clientX}px`;
+        els.patch.style.top = `${clientY}px`;
+        els.patch.classList.add('visible');
+      }
+
+      function hidePatch() {
+        els.patch.classList.remove('visible');
+      }
+
+      function bindEvents() {
+        // Pointer & touch tracking for simulated glove contact patch
+        document.addEventListener('pointermove', (e) => {
+          if (e.pointerType === 'mouse' || e.pointerType === 'pen' || e.pointerType === 'touch') {
+            updatePatchPosition(e.clientX, e.clientY);
+          }
+        }, { passive: true });
+
+        document.addEventListener('pointerdown', (e) => {
+          updatePatchPosition(e.clientX, e.clientY);
+        }, { passive: true });
+
+        document.addEventListener('pointerleave', hidePatch);
+        document.addEventListener('pointercancel', hidePatch);
+
+        // Navigation buttons
+        els.firstPageBtn.addEventListener('click', () => jumpToFirstPage('First Page button'));
+        els.quickFirstBtn.addEventListener('click', () => jumpToFirstPage('Quick P1 key'));
+        els.nextPageBtn.addEventListener('click', () => advanceToNextPage('Next Page button'));
+        els.symToggleBtn.addEventListener('click', toggleSymbolBank);
+
+        // Bottom utility keys
+        els.caseToggleBtn.addEventListener('click', toggleCase);
+        els.spaceKeyBtn.addEventListener('click', handleSpace);
+        els.backspaceKeyBtn.addEventListener('click', handleBackspace);
+
+        // Page count buttons (5..9)
+        els.pageCountBtns.forEach((btn) => {
+          btn.addEventListener('click', () => setLetterPageCount(btn.dataset.pageCount));
+        });
+
+        // Auto-return toggle
+        els.autoReturnToggle.addEventListener('click', toggleAutoReturn);
+
+        // Glove patch size buttons
+        els.patchStandardBtn.addEventListener('click', () => setGlovePatchSize(false));
+        els.patchHeavyBtn.addEventListener('click', () => setGlovePatchSize(true));
+
+        // Copy & Clear output actions
+        els.copyOutputBtn.addEventListener('click', () => {
+          if (!state.outputText) {
+            showStatusMessage('Nothing to copy yet — tap some keys first.', 'warn');
+            return;
+          }
+          try {
+            const tempArea = document.createElement('textarea');
+            tempArea.value = state.outputText;
+            tempArea.setAttribute('readonly', '');
+            tempArea.style.position = 'fixed';
+            tempArea.style.opacity = '0';
+            document.body.appendChild(tempArea);
+            tempArea.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(tempArea);
+            if (ok) {
+              showStatusMessage('Copied composed text to clipboard.');
+              recordTelemetry('COPY', `Copied ${state.outputText.length} characters`);
+            } else {
+              showStatusMessage('Copy command was blocked by browser.', 'warn');
+            }
+          } catch (err) {
+            showStatusMessage('Unable to copy text in this environment.', 'warn');
+          }
+        });
+
+        els.clearOutputBtn.addEventListener('click', () => {
+          if (!state.outputText) return;
+          const prevLen = state.outputText.length;
+          state.outputText = '';
+          recordTelemetry('CLEAR_BUFFER', `Cleared ${prevLen} characters`);
+          render();
+          showStatusMessage('Output cleared.');
+        });
+
+        els.clearTelemetryBtn.addEventListener('click', () => {
+          state.telemetry = [];
+          renderTelemetry();
+        });
+      }
+
+      // Initialize prototype
+      bindEvents();
+      render();
+    })();
+  </script>
+</body>
+</html>
